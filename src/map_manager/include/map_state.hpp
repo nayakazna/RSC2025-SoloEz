@@ -6,8 +6,8 @@
 #include <cstdint>
 
 #define KOSONG 0
-#define OBSTACLE 1
-#define VICTIM 2
+#define OBSTACLE -1
+#define VICTIM -2
 
 class MapState {
 public:
