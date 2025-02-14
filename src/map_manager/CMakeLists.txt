@@ -10,6 +10,8 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(custom_interface REQUIRED)
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -22,5 +24,17 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+add_executable(map_manager_node src/map_manager_node.cpp)
+ament_target_dependencies(map_manager_node
+  rclcpp
+  std_msgs
+  geometry_msgs
+  custom_interface
+)
+
+install(TARGETS map_manager_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 ament_package()
