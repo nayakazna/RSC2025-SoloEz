@@ -74,7 +74,7 @@ class MapManagerNode : public rclcpp::Node
             std::vector<int32_t>(map_state_msg_.width * map_state_msg_.height, 0)
         );
         
-        RCLCPP_INFO(this->get_logger(), "Keadaan peta berhasil diinisialisasi, Cik!");
+        RCLCPP_INFO(this->get_logger(), "Node map_state berhasil diinisialisasi, Cik!");
     }
 
     private:
@@ -85,9 +85,10 @@ class MapManagerNode : public rclcpp::Node
         rclcpp::Service<custom_interface::srv::AddVictim>::SharedPtr add_victim_srv_;
         custom_interface::msg::MapState map_state_msg_; // Data map state
 
+
+        // Bikin method callback buat service
         // Fungsi buat publish map state
-        void publish_map_state()
-        {
+        void publish_map_state() {
             map_state_pub_->publish(map_state_msg_);
             RCLCPP_INFO(
                 this->get_logger(), 
@@ -101,8 +102,7 @@ class MapManagerNode : public rclcpp::Node
         void add_obstacle_callback(
             const std::shared_ptr<custom_interface::srv::AddObstacle::Request> request,
             std::shared_ptr<custom_interface::srv::AddObstacle::Response> response
-            )
-        {
+        ) {
             // Early return kalo koordinat rintangan invalid yakni di luar ukuran map
             if (request->x < 0 || request->x >= map_state_msg_.width || request->y < 0 || request->y >= map_state_msg_.height)
             {
@@ -137,8 +137,7 @@ class MapManagerNode : public rclcpp::Node
         void add_victim_callback(
             const std::shared_ptr<custom_interface::srv::AddVictim::Request> request,
             std::shared_ptr<custom_interface::srv::AddVictim::Response> response
-            )
-        {
+        ) {
             // Early return kalo koordinat korban invalid yakni di luar ukuran map
             if (request->x < 0 || request->x >= map_state_msg_.width || request->y < 0 || request->y >= map_state_msg_.height)
             {
@@ -170,8 +169,7 @@ class MapManagerNode : public rclcpp::Node
         }
 };
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<MapManagerNode>();
     rclcpp::spin(node);
