@@ -11,6 +11,7 @@
 #include "custom_interface/msg/map_state.hpp"
 #include "custom_interface/srv/add_obstacle.hpp"
 #include "custom_interface/srv/add_victim.hpp"
+#include "map_state.hpp"
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
@@ -18,18 +19,17 @@ using namespace std::placeholders;
 class MapManagerNode : public rclcpp::Node
 {
     public:
-    MapManagerNode() : Node("map_manager")
+    MapManagerNode() : Node("map_manager"), map_state_(8, 8)
     {
         // Bikin publisher, timer, dan service
-        
         // publisher ke topic /map_state
-        map_state_pub_ = this->create_publisher<custom_interface::msg::MapState>(
+        this->map_state_pub_ = this->create_publisher<custom_interface::msg::MapState>(
             "map_state", 
             10
         );
         
         // timer buat publish map state
-        map_timer_ = this->create_wall_timer(
+        this->map_timer_ = this->create_wall_timer(
             500ms, 
             std::bind(&MapManagerNode::publish_map_state, this)
         );
@@ -57,22 +57,6 @@ class MapManagerNode : public rclcpp::Node
                 _2
             )
         );
-
-        // Inisialisasi map state
-        // Misal 8x8 kaya di spesifikasi
-        map_state_msg_.set__width(8);
-        map_state_msg_.set__height(8);
-        
-        // Inisialisasi grid data
-        // Set semua grid data jadi kosong
-        map_state_msg_.set__grid_data(
-            std::vector<int32_t>(map_state_msg_.width * map_state_msg_.height, KOSONG)
-        );
-        
-        // Inisialisasi path numbers
-        map_state_msg_.set__path_numbers(
-            std::vector<int32_t>(map_state_msg_.width * map_state_msg_.height, 0)
-        );
         
         RCLCPP_INFO(this->get_logger(), "Node map_state berhasil diinisialisasi, Cik!");
     }
@@ -80,22 +64,25 @@ class MapManagerNode : public rclcpp::Node
     private:
         // Pendefinisian atribut class
         rclcpp::Publisher<custom_interface::msg::MapState>::SharedPtr map_state_pub_;
-        rclcpp::TimerBase::SharedPtr map_timer_; // Delay buat publish map state
+        rclcpp::TimerBase::SharedPtr map_timer_;
         rclcpp::Service<custom_interface::srv::AddObstacle>::SharedPtr add_obstacle_srv_;
         rclcpp::Service<custom_interface::srv::AddVictim>::SharedPtr add_victim_srv_;
-        custom_interface::msg::MapState map_state_msg_; // Data map state
+        MapState map_state_;
 
 
-        // Bikin method callback buat service
         // Fungsi buat publish map state
         void publish_map_state() {
-            map_state_pub_->publish(map_state_msg_);
-            RCLCPP_INFO(
-                this->get_logger(), 
-                "Berhasil publish keadaan dari peta (%d x %d), Cik!", 
-                map_state_msg_.width, 
-                map_state_msg_.height
-            );
+            custom_interface::msg::MapState msg;
+            msg.set__width(map_state_.getWidth());
+            msg.set__height(map_state_.getHeight());
+            msg.set__grid_data(map_state_.getGridData());
+            std::string grid_str = map_state_.GridToArray();
+
+            this->map_state_pub_->publish(msg);
+
+            RCLCPP_INFO(this->get_logger(), "\n");
+            RCLCPP_INFO(this->get_logger(), "==== MapState ====");
+            RCLCPP_INFO(this->get_logger(), "\n%s", grid_str.c_str());
         }
 
         // Fungsi buat nambahin rintangan di map
@@ -104,20 +91,16 @@ class MapManagerNode : public rclcpp::Node
             std::shared_ptr<custom_interface::srv::AddObstacle::Response> response
         ) {
             // Early return kalo koordinat rintangan invalid yakni di luar ukuran map
-            if (request->x < 0 || request->x >= map_state_msg_.width || request->y < 0 || request->y >= map_state_msg_.height)
-            {
+            if (request->x < 0 || request->x >= map_state_.getWidth() || request->y < 0 || request->y >= map_state_.getHeight()) {
                 response->success = false;
                 response->message = "Koordinat rintangan gak valid, Cik!";
                 RCLCPP_ERROR(this->get_logger(), "%s", response->message.c_str());
                 return;
             }
             
-            // Hitung index dari koordinat (request->x, request->y) di grid data (indeks: w*y + x)
-            int idx = map_state_msg_.width * request->y + request->x;
-
             // Early return kalo udah ada rintangan atau korban di koordinat (request->x, request->y)
-            if (map_state_msg_.grid_data[idx] == OBSTACLE || map_state_msg_.grid_data[idx] == VICTIM)
-            {
+            if (map_state_.getGridValue(request->x, request->y) == OBSTACLE || 
+                map_state_.getGridValue(request->x, request->y) == VICTIM) {
                 response->success = false;
                 response->message = "Di koordinat (" + std::to_string(request->x) + ", " + std::to_string(request->y) +  ") udah ada rintangan atau korban, Cik!";
                 RCLCPP_ERROR(this->get_logger(), "%s", response->message.c_str());
@@ -125,7 +108,7 @@ class MapManagerNode : public rclcpp::Node
             }
 
             // Koordinat rintangan valid -> nambahin rintangan
-            map_state_msg_.grid_data[idx] = OBSTACLE;
+            map_state_.setObstacle(request->x, request->y);
             
             // Response berhasil
             response->success = true;
@@ -139,20 +122,16 @@ class MapManagerNode : public rclcpp::Node
             std::shared_ptr<custom_interface::srv::AddVictim::Response> response
         ) {
             // Early return kalo koordinat korban invalid yakni di luar ukuran map
-            if (request->x < 0 || request->x >= map_state_msg_.width || request->y < 0 || request->y >= map_state_msg_.height)
-            {
+            if (request->x < 0 || request->x >= map_state_.getWidth() || request->y < 0 || request->y >= map_state_.getHeight()) {
                 response->success = false;
                 response->message = "Koordinat korban gak valid, Cik!";
                 RCLCPP_ERROR(this->get_logger(), "%s", response->message.c_str());
                 return;
             }
             
-            // Hitung index dari koordinat (request->x, request->y) di grid data (indeks: w*y + x)
-            int idx = map_state_msg_.width * request->y + request->x;
-
             // Early return kalo udah ada rintangan atau korban di koordinat (request->x, request->y)
-            if (map_state_msg_.grid_data[idx] == OBSTACLE || map_state_msg_.grid_data[idx] == VICTIM)
-            {
+            if (map_state_.getGridValue(request->x, request->y) == OBSTACLE || 
+                map_state_.getGridValue(request->x, request->y) == VICTIM) {
                 response->success = false;
                 response->message = "Di koordinat (" + std::to_string(request->x) + ", " + std::to_string(request->y) +  ") udah ada rintangan atau korban, Cik!";
                 RCLCPP_ERROR(this->get_logger(), "%s", response->message.c_str());
@@ -160,11 +139,11 @@ class MapManagerNode : public rclcpp::Node
             }
 
             // Koordinat rintangan valid -> nambahin rintangan
-            map_state_msg_.grid_data[idx] = VICTIM;
+            map_state_.setVictim(request->x, request->y);
             
             // Response berhasil
             response->success = true;
-            response->message = "Rintangan berhasil ditambahkan di koordinat (" + std::to_string(request->x) + ", " + std::to_string(request->y) + "), Cik!";
+            response->message = "Korban berhasil ditambahkan di koordinat (" + std::to_string(request->x) + ", " + std::to_string(request->y) + "), Cik!";
             RCLCPP_INFO(this->get_logger(), "%s", response->message.c_str());
         }
 };
